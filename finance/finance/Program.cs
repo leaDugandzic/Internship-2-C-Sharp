@@ -7,6 +7,7 @@ class Program
     static Dictionary<int, (string FirstName, string LastName, DateTime BirthDate, Dictionary<string, List<(int Id, decimal Amount, string Description, string Type, string Category, DateTime DateTime)>> Accounts)> users = new();
     static int userIdCounter = 1;
     static int transactionIdCounter = 1;
+
     static void Main(string[] args)
     {
         InitializeData();
@@ -256,18 +257,15 @@ class Program
             Console.WriteLine($"Rashodi: {totalExpense:0.00} EUR");
 
             Console.Write("Unesite mjesec i godinu (yyyy-mm) za analizu: ");
-            if (DateTime.TryParse(Console.ReadLine() + "-01", out var monthYear))
+            if (DateTime.TryParse(Console.ReadLine() + "-01", out var selectedMonth))
             {
-                var monthlyTransactions = transactions.Where(t => t.DateTime.Month == monthYear.Month && t.DateTime.Year == monthYear.Year);
-                var monthlyIncome = monthlyTransactions.Where(t => t.Type == "prihod").Sum(t => t.Amount);
-                var monthlyExpense = monthlyTransactions.Where(t => t.Type == "rashod").Sum(t => t.Amount);
-
-                Console.WriteLine($"Prihodi za {monthYear.ToString("MMMM yyyy")}: {monthlyIncome:0.00} EUR");
-                Console.WriteLine($"Rashodi za {monthYear.ToString("MMMM yyyy")}: {monthlyExpense:0.00} EUR");
-            }
-            else
-            {
-                Console.WriteLine("Neispravan unos datuma.");
+                var monthlyTransactions = transactions.Where(t => t.DateTime.Year == selectedMonth.Year && t.DateTime.Month == selectedMonth.Month);
+                Console.WriteLine($"Ukupan broj transakcija u {selectedMonth:yyyy-MM}: {monthlyTransactions.Count()}");
+                Console.WriteLine($"Ukupno za mjesec: {monthlyTransactions.Sum(t => t.Amount):0.00} EUR");
+                if (monthlyTransactions.Any())
+                {
+                    Console.WriteLine($"Prosječni iznos transakcije: {monthlyTransactions.Average(t => t.Amount):0.00} EUR");
+                }
             }
         }
         else
@@ -278,29 +276,65 @@ class Program
 
     static void DeleteTransaction((string FirstName, string LastName, DateTime BirthDate, Dictionary<string, List<(int Id, decimal Amount, string Description, string Type, string Category, DateTime DateTime)>> Accounts) user)
     {
-        Console.Write("Odaberite račun za brisanje transakcije (tekući, žiro, prepaid): ");
+        Console.Write("Odaberite račun (tekući, žiro, prepaid): ");
         var accountType = Console.ReadLine();
 
         if (user.Accounts.ContainsKey(accountType))
         {
-            Console.Write("Unesite ID transakcije za brisanje: ");
-            if (int.TryParse(Console.ReadLine(), out var transactionId))
+            Console.WriteLine("Opcije za brisanje transakcija:");
+            Console.WriteLine("1 - Po ID-u");
+            Console.WriteLine("2 - Ispod određenog iznosa");
+            Console.WriteLine("3 - Sve prihode");
+            Console.WriteLine("4 - Sve rashode");
+            Console.WriteLine("0 - Povratak");
+            Console.Write("Odabir: ");
+            var choice = Console.ReadLine();
+
+            if (choice == "0") return;
+
+            var transactions = user.Accounts[accountType];
+
+            switch (choice)
             {
-                var account = user.Accounts[accountType];
-                var transaction = account.FirstOrDefault(t => t.Id == transactionId);
-                if (transaction != default)
-                {
-                    account.Remove(transaction);
-                    Console.WriteLine("Transakcija uspješno obrisana.");
-                }
-                else
-                {
-                    Console.WriteLine("Transakcija s tim ID-em ne postoji.");
-                }
-            }
-            else
-            {
-                Console.WriteLine("Neispravan ID transakcije.");
+                case "1":
+                    Console.Write("Unesite ID transakcije za brisanje: ");
+                    if (int.TryParse(Console.ReadLine(), out var idToDelete))
+                    {
+                        var transaction = transactions.FirstOrDefault(t => t.Id == idToDelete);
+                        if (transaction != default)
+                        {
+                            transactions.Remove(transaction);
+                            Console.WriteLine("Transakcija uspješno obrisana.");
+                        }
+                        else
+                        {
+                            Console.WriteLine("Transakcija s tim ID-om ne postoji.");
+                        }
+                    }
+                    break;
+
+                case "2":
+                    Console.Write("Unesite maksimalni iznos transakcija za brisanje: ");
+                    if (decimal.TryParse(Console.ReadLine(), out var maxAmount))
+                    {
+                        transactions.RemoveAll(t => t.Amount < maxAmount);
+                        Console.WriteLine("Transakcije ispod unesenog iznosa su obrisane.");
+                    }
+                    break;
+
+                case "3":
+                    transactions.RemoveAll(t => t.Type == "prihod");
+                    Console.WriteLine("Svi prihodi su obrisani.");
+                    break;
+
+                case "4":
+                    transactions.RemoveAll(t => t.Type == "rashod");
+                    Console.WriteLine("Svi rashodi su obrisani.");
+                    break;
+
+                default:
+                    Console.WriteLine("Neispravan unos.");
+                    break;
             }
         }
         else
@@ -311,41 +345,83 @@ class Program
 
     static void TransferFunds((string FirstName, string LastName, DateTime BirthDate, Dictionary<string, List<(int Id, decimal Amount, string Description, string Type, string Category, DateTime DateTime)>> Accounts) user)
     {
-        Console.Write("Unesite naziv računa iz kojeg se prebacuju sredstva (tekući, žiro, prepaid): ");
-        var fromAccountType = Console.ReadLine();
+        Console.WriteLine("1 - Interni prijenos");
+        Console.WriteLine("2 - Eksterni prijenos");
+        Console.Write("Odabir: ");
+        var choice = Console.ReadLine();
 
-        Console.Write("Unesite naziv računa na koji se prebacuju sredstva (tekući, žiro, prepaid): ");
-        var toAccountType = Console.ReadLine();
-
-        if (user.Accounts.ContainsKey(fromAccountType) && user.Accounts.ContainsKey(toAccountType))
+        if (choice == "1")
         {
-            Console.Write("Unesite iznos za prijenos: ");
-            if (decimal.TryParse(Console.ReadLine(), out var amount))
+            Console.Write("Izvorni račun (tekući, žiro, prepaid): ");
+            var sourceAccount = Console.ReadLine();
+            Console.Write("Ciljani račun (tekući, žiro, prepaid): ");
+            var targetAccount = Console.ReadLine();
+
+            if (user.Accounts.ContainsKey(sourceAccount) && user.Accounts.ContainsKey(targetAccount))
             {
-                if (user.Accounts[fromAccountType].Sum(t => t.Amount) >= amount)
+                Console.Write("Unesite iznos za prijenos: ");
+                if (decimal.TryParse(Console.ReadLine(), out var transferAmount) && transferAmount > 0)
                 {
-                    user.Accounts[fromAccountType].Add((transactionIdCounter++, -amount, "Interni prijenos", "rashod", "Transfer", DateTime.Now));
-                    user.Accounts[toAccountType].Add((transactionIdCounter++, amount, "Interni prijenos", "prihod", "Transfer", DateTime.Now));
-                    Console.WriteLine("Prijenos uspješno izvršen.");
+                    user.Accounts[sourceAccount].Add((transactionIdCounter++, -transferAmount, "Interni prijenos", "rashod", "transfer", DateTime.Now));
+                    user.Accounts[targetAccount].Add((transactionIdCounter++, transferAmount, "Interni prijenos", "prihod", "transfer", DateTime.Now));
+                    Console.WriteLine("Interni prijenos uspješno obavljen.");
                 }
                 else
                 {
-                    Console.WriteLine("Nema dovoljno sredstava na računu.");
+                    Console.WriteLine("Neispravan iznos.");
                 }
             }
             else
             {
-                Console.WriteLine("Neispravan iznos.");
+                Console.WriteLine("Jedan ili oba računa ne postoje.");
+            }
+        }
+        else if (choice == "2")
+        {
+            Console.Write("Unesite ID primatelja: ");
+            if (int.TryParse(Console.ReadLine(), out var recipientId) && users.ContainsKey(recipientId))
+            {
+                var recipient = users[recipientId];
+                Console.Write("Ciljani račun primatelja (tekući, žiro, prepaid): ");
+                var targetAccount = Console.ReadLine();
+
+                if (recipient.Accounts.ContainsKey(targetAccount))
+                {
+                    Console.Write("Unesite iznos za prijenos: ");
+                    if (decimal.TryParse(Console.ReadLine(), out var transferAmount) && transferAmount > 0)
+                    {
+                        user.Accounts["tekući"].Add((transactionIdCounter++, -transferAmount, "Eksterni prijenos", "rashod", "transfer", DateTime.Now));
+                        recipient.Accounts[targetAccount].Add((transactionIdCounter++, transferAmount, "Eksterni prijenos", "prihod", "transfer", DateTime.Now));
+                        Console.WriteLine("Eksterni prijenos uspješno obavljen.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Neispravan iznos.");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Račun primatelja ne postoji.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Primatelj s unesenim ID-om ne postoji.");
             }
         }
         else
         {
-            Console.WriteLine("Jedan ili oba računa ne postoje.");
+            Console.WriteLine("Neispravan unos.");
         }
     }
 
     static void AddUser(string firstName, string lastName, DateTime birthDate)
     {
-        users.Add(userIdCounter++, (firstName, lastName, birthDate, new Dictionary<string, List<(int Id, decimal Amount, string Description, string Type, string Category, DateTime DateTime)>>()));
+        users[userIdCounter++] = (firstName, lastName, birthDate, new Dictionary<string, List<(int, decimal, string, string, string, DateTime)>>
+        {
+            { "tekući", new List<(int, decimal, string, string, string, DateTime)>() { (transactionIdCounter++, 100.00m, "Početno stanje", "prihod", "init", DateTime.Now) } },
+            { "žiro", new List<(int, decimal, string, string, string, DateTime)>() },
+            { "prepaid", new List<(int, decimal, string, string, string, DateTime)>() }
+        });
     }
 }
